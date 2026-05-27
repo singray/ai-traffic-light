@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
 const http = require('http');
 const path = require('path');
 
@@ -14,6 +14,7 @@ let state = {
 
 let mainWindow = null;
 let settingsWindow = null;
+let tray = null;
 let apiServer = null;
 
 // 命令行参数
@@ -22,6 +23,65 @@ const PORT = parseInt(args.find(a => a.startsWith('--port='))?.split('=')[1] || 
 const SCALE = parseFloat(args.find(a => a.startsWith('--scale='))?.split('=')[1] || '2.5');
 const THEME = args.find(a => a.startsWith('--theme='))?.split('=')[1] || 'dark';
 state.theme = THEME;
+
+// ============================================================
+// 图标
+// ============================================================
+const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+
+function getIcon() {
+  return nativeImage.createFromPath(iconPath);
+}
+
+// ============================================================
+// 系统托盘
+// ============================================================
+function createTray() {
+  tray = new Tray(getIcon());
+  tray.setToolTip('AI Traffic Light');
+  updateTrayMenu();
+
+  // 单击托盘图标 → 显示/隐藏主窗口
+  tray.on('click', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
+}
+
+function updateTrayMenu() {
+  const colorLabel = state.color === 'red' ? '🔴 正在思考' : state.color === 'yellow' ? '🟡 等待确认' : '🟢 已完成';
+  const contextMenu = Menu.buildFromTemplate([
+    { label: colorLabel, enabled: false },
+    { type: 'separator' },
+    { label: '🔴 红灯 - 正在思考', type: 'radio', checked: state.color === 'red', click: () => setState('red') },
+    { label: '🟡 黄灯 - 等待确认', type: 'radio', checked: state.color === 'yellow', click: () => setState('yellow') },
+    { label: '🟢 绿灯 - 已完成', type: 'radio', checked: state.color === 'green', click: () => setState('green') },
+    { type: 'separator' },
+    { label: '设置...', click: () => openSettings() },
+    { type: 'separator' },
+    { label: '退出', click: () => { if (apiServer) apiServer.close(); app.quit(); } },
+  ]);
+  if (tray) {
+    tray.setContextMenu(contextMenu);
+  }
+}
+
+function setState(color) {
+  state.color = color;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('set-status', { color });
+  }
+  updateTrayMenu();
+  // 更新托盘图标提示
+  const text = color === 'red' ? '正在思考' : color === 'yellow' ? '等待确认' : '已完成';
+  if (tray) tray.setToolTip('AI Traffic Light - ' + text);
+}
 
 // ============================================================
 // 创建主窗口（只有红绿灯）
@@ -39,7 +99,8 @@ function createWindow() {
     alwaysOnTop: true,
     resizable: false,
     hasShadow: false,
-    skipTaskbar: true,
+    skipTaskbar: true,  // 主窗口不占任务栏，用托盘代替
+    icon: getIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -49,6 +110,14 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
   mainWindow.setVisibleOnAllWorkspaces(true);
+
+  // 关闭窗口时隐藏而非退出（托盘模式）
+  mainWindow.on('close', (e) => {
+    if (!app.isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+    }
+  });
 
   // 主窗口获得焦点时关闭设置面板
   mainWindow.on('focus', () => {
@@ -64,7 +133,6 @@ function createWindow() {
 // 设置面板窗口（独立弹出）
 // ============================================================
 function openSettings() {
-  // 如果已打开则关闭（切换行为）
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     closeSettings();
     return;
@@ -72,13 +140,16 @@ function openSettings() {
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
+  // 确保主窗口可见
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+
   const mainBounds = mainWindow.getBounds();
 
-  // 默认弹出在红绿灯左侧
   let settingsX = mainBounds.x - 268;
   let settingsY = mainBounds.y - 8;
 
-  // 左侧空间不够则弹到右侧
   if (settingsX < 0) {
     settingsX = mainBounds.x + mainBounds.width + 12;
   }
@@ -96,6 +167,7 @@ function openSettings() {
     skipTaskbar: true,
     focusable: true,
     show: false,
+    icon: getIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -105,7 +177,6 @@ function openSettings() {
 
   settingsWindow.loadFile('settings.html');
 
-  // 窗口准备好后再显示（防止闪烁）
   settingsWindow.once('ready-to-show', () => {
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.show();
@@ -113,9 +184,7 @@ function openSettings() {
     }
   });
 
-  // 失去焦点时自动关闭
   settingsWindow.on('blur', () => {
-    // 延迟一小段时间，避免切换焦点时的竞态
     setTimeout(() => {
       if (settingsWindow && !settingsWindow.isDestroyed()) {
         closeSettings();
@@ -133,7 +202,6 @@ function closeSettings() {
     settingsWindow.destroy();
     settingsWindow = null;
   }
-  // 通知主窗口设置已关闭
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('settings-closed');
   }
@@ -189,7 +257,10 @@ function startApiServer() {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('set-status', { color });
           }
+          // 同步托盘状态
+          updateTrayMenu();
           const text = color === 'red' ? 'THINKING' : color === 'yellow' ? 'WAITING' : 'DONE';
+          if (tray) tray.setToolTip('AI Traffic Light - ' + text);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'ok', color, text }));
         } catch {
@@ -222,13 +293,14 @@ ipcMain.handle('get-state', () => ({ ...state }));
 
 ipcMain.on('update-state', (event, updates) => {
   Object.assign(state, updates);
-  // 广播给所有窗口（主窗口 + 设置面板）
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('state-update', updates);
   }
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send('state-update', updates);
   }
+  // 状态变更时更新托盘
+  if ('color' in updates) updateTrayMenu();
 });
 
 ipcMain.on('adjust-window', (event, { width, height }) => {
@@ -243,13 +315,13 @@ ipcMain.on('set-topmost', (event, topmost) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setAlwaysOnTop(topmost);
   }
-  // 设置窗口也跟随
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.setAlwaysOnTop(topmost);
   }
 });
 
 ipcMain.on('quit-app', () => {
+  app.isQuitting = true;
   if (apiServer) apiServer.close();
   app.quit();
 });
@@ -268,13 +340,20 @@ ipcMain.on('close-settings', () => {
 app.whenReady().then(() => {
   startApiServer();
   createWindow();
+  createTray();
 });
 
 app.on('window-all-closed', () => {
-  if (apiServer) apiServer.close();
-  app.quit();
+  // 托盘模式下不退出，用户通过托盘退出
 });
 
 app.on('before-quit', () => {
+  app.isQuitting = true;
   if (apiServer) apiServer.close();
+});
+
+app.on('activate', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+  }
 });

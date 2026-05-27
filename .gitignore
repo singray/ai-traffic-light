@@ -1,10 +1,5 @@
-debug.log
-__pycache__/
-*.pyc
-.DS_Store
-*.pyo
-.pytest_cache/
 node_modules/
 *.zip
 *.msi
-gh_portable/
+.DS_Store
+debug.log
