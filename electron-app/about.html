@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root {
+    --bg-surface: #F5F5F7;
+    --border-default: #D2D2D7;
+    --text-primary: #1D1D1F;
+    --text-secondary: #6E6E73;
+    --text-muted: #A1A1A6;
+    --accent: #34C759;
+    --shadow-panel: 0 8px 24px rgba(0,0,0,0.12);
+    --transition-theme: 250ms ease-out;
+  }
+
+  [data-theme="dark"] {
+    --bg-surface: #2C2C2E;
+    --border-default: #424245;
+    --text-primary: #F5F5F7;
+    --text-secondary: #86868B;
+    --text-muted: #636366;
+    --accent: #30D158;
+    --shadow-panel: 0 8px 24px rgba(0,0,0,0.36);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .panel {
+    margin: 8px;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-panel);
+    transition: background var(--transition-theme), border-color var(--transition-theme);
+    text-align: center;
+  }
+
+  .app-icon {
+    width: 40px; height: 40px;
+    margin: 0 auto 10px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #FF3B30, #FFCC00, #30D158);
+    position: relative;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .app-icon::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 7px;
+    background: var(--bg-surface);
+  }
+
+  .app-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .app-version {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border-default);
+    margin: 10px 0;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    padding: 3px 0;
+  }
+  .info-label { color: var(--text-secondary); }
+  .info-value { color: var(--text-primary); font-weight: 500; }
+
+  .close-hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 10px;
+  }
+
+  body.no-transition,
+  body.no-transition .panel,
+  body.no-transition * {
+    transition: none !important;
+  }
+</style>
+</head>
+<body data-theme="dark">
+
+<div class="panel">
+  <div class="app-icon"></div>
+  <div class="app-name">AI Traffic Light</div>
+  <div class="app-version">v1.0</div>
+  <div class="divider"></div>
+  <div class="info-row">
+    <span class="info-label">作者</span>
+    <span class="info-value">gray</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">平台</span>
+    <span class="info-value">Electron</span>
+  </div>
+  <div class="close-hint">点击空白处关闭</div>
+</div>
+
+<script>
+  async function init() {
+    try {
+      const state = await window.trafficLightAPI.getState();
+      const theme = state.theme || 'dark';
+      document.body.setAttribute('data-theme', theme);
+    } catch(e) { console.error('About init error:', e); }
+  }
+
+  window.trafficLightAPI.onStateUpdate((data) => {
+    if ('theme' in data) {
+      const newTheme = data.theme;
+      if (document.body.getAttribute('data-theme') === newTheme) return;
+      document.body.classList.add('no-transition');
+      document.body.offsetHeight;
+      document.body.setAttribute('data-theme', newTheme);
+      document.body.offsetHeight;
+      requestAnimationFrame(() => {
+        document.body.classList.remove('no-transition');
+      });
+    }
+  });
+
+  init();
+</script>
+
+</body>
+</html>

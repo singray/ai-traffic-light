@@ -134,6 +134,7 @@
     <span class="setting-label">窗口置顶</span>
     <div class="switch" id="switchPin"></div>
   </div>
+  <div class="setting-action" id="btnAbout">关于</div>
   <div class="setting-action exit" id="btnExit">退出应用</div>
 </div>
 
@@ -145,6 +146,7 @@
   const switchSingle = document.getElementById('switchSingle');
   const switchDark = document.getElementById('switchDark');
   const switchPin = document.getElementById('switchPin');
+  const btnAbout = document.getElementById('btnAbout');
   const btnExit = document.getElementById('btnExit');
 
   // ============================================
@@ -200,6 +202,11 @@
     switchPin.classList.toggle('active', isPinned);
     window.trafficLightAPI.setTopmost(isPinned);
     window.trafficLightAPI.updateState({ alwaysOnTop: isPinned });
+  });
+
+  btnAbout.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.trafficLightAPI.openAbout();
   });
 
   btnExit.addEventListener('click', (e) => {

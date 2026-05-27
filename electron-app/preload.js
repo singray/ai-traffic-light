@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('trafficLightAPI', {
   // 关闭设置面板
   closeSettings: () => ipcRenderer.send('close-settings'),
 
+  // 打开关于窗口
+  openAbout: () => ipcRenderer.send('open-about'),
+
   // 监听外部 API 状态变化
   onStatusChange: (callback) => {
     ipcRenderer.on('set-status', (event, data) => callback(data));

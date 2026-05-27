@@ -71,49 +71,220 @@ curl -X POST http://localhost:9527/api/status \
 
 ---
 
-## 🔗 与 Claude Code / AI 助手集成
+## 🔗 与 Claude Code 集成（Windows 推荐方案）⭐
 
-### Hooks 配置（推荐 ⭐）
+通过 hooks 把 Claude Code 的生命周期事件映射成灯色：
 
-在 `~/.claude/settings.json` 中添加 hooks，Claude Code 会在对应生命周期自动调用红绿灯 API：
+| 事件 | 颜色 | 含义 |
+|---|:---:|---|
+| `SessionStart` | 🟢 绿 | 刚启动 / 待命 |
+| `UserPromptSubmit` | 🔴 红 | 开始处理你提的问题 |
+| `PreToolUse` | 🔴 红 | 进行中（调用工具） |
+| `PermissionRequest` | 🟡 黄闪 | 需要你做选择 |
+| `Stop` | 🟢 绿 | 一轮回答完毕 |
+
+**为什么要用助手脚本而不是直接在 hook 里写 curl？**
+
+- Windows 下 inline 命令的引号转义极其痛苦
+- 想做到 "启动时若服务未运行则自动拉起 / 已运行则跳过 / 失败不报错"，单条命令写不开
+- 抽成 `tl.ps1` 后，5 个 hook 都只是一行调用，干净易维护
+
+---
+
+### 第 1 步：放置助手脚本
+
+新建 `~/.claude/tl.ps1`（即 `C:\Users\<你>\.claude\tl.ps1`），内容如下：
+
+```powershell
+# Traffic Light helper for Claude Code hooks
+# Usage:
+#   tl.ps1 ensure                # 启动 electron 红绿灯（已存在则跳过），切绿灯
+#   tl.ps1 red | yellow | green  # 切灯
+#   tl.ps1 yellow blink          # 黄灯闪烁
+# All errors are swallowed silently.
+
+param(
+    [string]$Color = "",
+    [string]$Mode  = ""
+)
+
+$ErrorActionPreference = "SilentlyContinue"
+
+# ⚠️ 改成你本地 traffic-light/electron-app 的绝对路径
+$TL_APP_DIR = "C:\path\to\traffic-light\electron-app"
+$TL_EXE     = Join-Path $TL_APP_DIR "node_modules\electron\dist\electron.exe"
+
+function Test-TLPort {
+    try {
+        $c = New-Object System.Net.Sockets.TcpClient
+        $c.Connect("127.0.0.1", 9527)
+        $c.Close()
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Set-TLColor([string]$col, [bool]$blink) {
+    if ([string]::IsNullOrEmpty($col)) { return }
+    if (-not (Test-TLPort)) { return }
+    try {
+        $body = @{ color = $col; blink = $blink } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri "http://127.0.0.1:9527/api/status" `
+            -Method POST -ContentType "application/json" `
+            -Body $body -TimeoutSec 2 | Out-Null
+    } catch {}
+}
+
+try {
+    if ($Color -eq "ensure") {
+        if (-not (Test-TLPort)) {
+            try {
+                Start-Process `
+                    -FilePath $TL_EXE `
+                    -ArgumentList ".","--scale=2.5","--theme=dark","--port=9527" `
+                    -WorkingDirectory $TL_APP_DIR
+            } catch {}
+
+            for ($i = 0; $i -lt 20; $i++) {
+                Start-Sleep -Milliseconds 500
+                if (Test-TLPort) { break }
+            }
+        }
+        Set-TLColor "green" $false
+        return
+    }
+
+    $blink = ($Mode -eq "blink")
+    Set-TLColor $Color $blink
+} catch {}
+```
+
+**只需要改一行**：把 `$TL_APP_DIR` 换成你本地 `electron-app` 的绝对路径。
+
+### 第 2 步：在 settings.json 里挂 5 个 hooks
+
+合并到 `~/.claude/settings.json` 的 `hooks` 字段下（已有 hooks 别覆盖，**追加**到对应事件数组里）：
 
 ```jsonc
-// ~/.claude/settings.json
 {
   "hooks": {
-    "UserPromptSubmit": [{
-      "matcher": "*",
-      "hooks": [{ "type": "command", "command": "curl -s -X POST http://localhost:9527/api/status -H \"Content-Type: application/json\" -d \"{\\\"color\\\":\\\"red\\\"}\"" }]
-    }],
-    "PreToolUse": [{
-      "matcher": "Bash|Write|Edit|Read|Glob|Grep",
-      "hooks": [{ "type": "command", "command": "curl -s -X POST http://localhost:9527/api/status -H \"Content-Type: application/json\" -d \"{\\\"color\\\":\\\"red\\\"}\"" }]
-    }],
-    "Stop": [{
-      "matcher": "*",
-      "hooks": [{ "type": "command", "command": "curl -s -X POST http://localhost:9527/api/status -H \"Content-Type: application/json\" -d \"{\\\"color\\\":\\\"green\\\"}\"" }]
-    }]
+    "SessionStart": [
+      {
+        "hooks": [{
+          "async": true,
+          "shell": "powershell",
+          "type": "command",
+          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" ensure"
+        }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [{
+          "async": true,
+          "shell": "powershell",
+          "type": "command",
+          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" red"
+        }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|Read|Glob|Grep|WebFetch|WebSearch|Task|Agent",
+        "hooks": [{
+          "async": true,
+          "shell": "powershell",
+          "type": "command",
+          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" red"
+        }]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [{
+          "async": true,
+          "shell": "powershell",
+          "type": "command",
+          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" yellow blink"
+        }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{
+          "async": true,
+          "shell": "powershell",
+          "type": "command",
+          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" green"
+        }]
+      }
+    ]
   }
 }
 ```
 
-### HTTP 快捷调用
+**关键点：**
+
+- `async: true` —— hook 在后台跑，不阻塞 Claude Code 启动 / 提交
+- `shell: "powershell"` —— 显式走 PowerShell，避免 Git Bash 上下文里语法被吃
+- `& "<路径>"` —— PowerShell 调用运算符，路径含空格也安全
+
+### 第 3 步：替换路径里的 `<你>`
+
+把 5 处 `C:\\Users\\<你>\\.claude\\tl.ps1` 替换为你的真实用户名。注意 JSON 里反斜杠要写成 `\\`。
+
+### 第 4 步：重启 Claude Code
+
+新打开一个 Claude Code 会话，你应该看到：
+1. 启动后 → 🟢 绿灯（待命）
+2. 提交问题 → 🔴 红灯（处理中）
+3. 弹权限确认 → 🟡 黄灯闪烁
+4. 回答结束 → 🟢 绿灯
+
+### 自检清单
+
+如果灯不动：
+
+- [ ] `~/.claude/tl.ps1` 里的 `$TL_APP_DIR` 路径正确？
+- [ ] 单独跑 `powershell -File ~/.claude/tl.ps1 ensure` 能拉起红绿灯吗？
+- [ ] `curl http://127.0.0.1:9527/api/health` 是否返回 `{"status":"running"}`？
+- [ ] settings.json 里的 5 处 `<你>` 都替换了？
+- [ ] settings.json 是合法 JSON？运行 `powershell -Command "Get-Content ~/.claude/settings.json -Raw | ConvertFrom-Json"` 不报错？
+
+---
+
+### 极简方案：直接 curl 调用
+
+如果不需要"启动时自动拉起"，仅想切灯，可以跳过助手脚本，hook 里直接写 curl（macOS / Linux 适用）：
 
 ```bash
 # 加入 ~/.bashrc 或 ~/.zshrc
 alias tl='curl -s -X POST http://localhost:9527/api/status -H "Content-Type: application/json" -d'
 
 tl '{"color":"red"}'      # 思考中
-tl '{"color":"yellow"}'   # 等待确认
+tl '{"color":"yellow","blink":true}'   # 等待确认
 tl '{"color":"green"}'    # 完成
 ```
 
-```powershell
-# PowerShell（加入 $PROFILE）
-function Set-TrafficLight {
-    param([ValidateSet("red","yellow","green")][string]$Color)
-    Invoke-RestMethod -Uri "http://localhost:9527/api/status" -Method POST `
-        -ContentType "application/json" -Body (@{color=$Color} | ConvertTo-Json)
+或 macOS / Linux 的 hooks 配置：
+
+```jsonc
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -s -X POST http://localhost:9527/api/status -H 'Content-Type: application/json' -d '{\"color\":\"red\"}' >/dev/null 2>&1 || true"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "curl -s -X POST http://localhost:9527/api/status -H 'Content-Type: application/json' -d '{\"color\":\"green\"}' >/dev/null 2>&1 || true"
+      }]
+    }]
+  }
 }
 ```
 

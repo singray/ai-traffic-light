@@ -14,6 +14,7 @@ let state = {
 
 let mainWindow = null;
 let settingsWindow = null;
+let aboutWindow = null;
 let tray = null;
 let apiServer = null;
 
@@ -25,12 +26,68 @@ const THEME = args.find(a => a.startsWith('--theme='))?.split('=')[1] || 'dark';
 state.theme = THEME;
 
 // ============================================================
-// 图标
+// 托盘图标 - 内嵌生成，避免外部 ICO 格式问题
 // ============================================================
-const iconPath = path.join(__dirname, 'assets', 'icon.ico');
+function createTrayIcon() {
+  const W = 16, H = 16;
+  const buf = Buffer.alloc(W * H * 4, 0); // BGRA, bottom-up
+
+  function setPixel(x, y, r, g, b, a) {
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    const row = H - 1 - y;
+    const idx = (row * W + x) * 4;
+    buf[idx] = b;
+    buf[idx + 1] = g;
+    buf[idx + 2] = r;
+    buf[idx + 3] = a;
+  }
+
+  function fillCircle(cx, cy, radius, r, g, b, a) {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= radius) {
+          const aa = dist > radius - 0.8 ? Math.max(0, (radius - dist) / 0.8) : 1;
+          setPixel(x, y, r, g, b, Math.round(a * aa));
+        }
+      }
+    }
+  }
+
+  function fillRect(rx, ry, rw, rh, r, g, b, a) {
+    for (let y = ry; y < ry + rh; y++) {
+      for (let x = rx; x < rx + rw; x++) {
+        setPixel(x, y, r, g, b, a);
+      }
+    }
+  }
+
+  // 深色圆角背景
+  fillRect(2, 1, 12, 14, 40, 40, 42, 255);
+  // 圆角修正
+  setPixel(2, 1, 0, 0, 0, 0);
+  setPixel(13, 1, 0, 0, 0, 0);
+  setPixel(2, 14, 0, 0, 0, 0);
+  setPixel(13, 14, 0, 0, 0, 0);
+
+  // 红灯
+  fillCircle(8, 5, 2.2, 255, 59, 48, 255);
+  // 黄灯
+  fillCircle(8, 9, 2.2, 255, 204, 0, 255);
+  // 绿灯
+  fillCircle(8, 13, 2.2, 48, 209, 88, 255);
+
+  return nativeImage.createFromBitmap(buf, { width: W, height: H });
+}
+
+let trayIcon = null;
 
 function getIcon() {
-  return nativeImage.createFromPath(iconPath);
+  if (!trayIcon) {
+    trayIcon = createTrayIcon();
+  }
+  return trayIcon;
 }
 
 // ============================================================
@@ -78,7 +135,6 @@ function setState(color) {
     mainWindow.webContents.send('set-status', { color });
   }
   updateTrayMenu();
-  // 更新托盘图标提示
   const text = color === 'red' ? '正在思考' : color === 'yellow' ? '等待确认' : '已完成';
   if (tray) tray.setToolTip('AI Traffic Light - ' + text);
 }
@@ -99,7 +155,7 @@ function createWindow() {
     alwaysOnTop: true,
     resizable: false,
     hasShadow: false,
-    skipTaskbar: true,  // 主窗口不占任务栏，用托盘代替
+    skipTaskbar: true,
     icon: getIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -111,7 +167,6 @@ function createWindow() {
   mainWindow.loadFile('index.html');
   mainWindow.setVisibleOnAllWorkspaces(true);
 
-  // 关闭窗口时隐藏而非退出（托盘模式）
   mainWindow.on('close', (e) => {
     if (!app.isQuitting) {
       e.preventDefault();
@@ -119,9 +174,9 @@ function createWindow() {
     }
   });
 
-  // 主窗口获得焦点时关闭设置面板
   mainWindow.on('focus', () => {
     closeSettings();
+    closeAbout();
   });
 
   if (process.argv.includes('--dev')) {
@@ -140,13 +195,13 @@ function openSettings() {
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
-  // 确保主窗口可见
   if (!mainWindow.isVisible()) {
     mainWindow.show();
   }
 
-  const mainBounds = mainWindow.getBounds();
+  closeAbout();
 
+  const mainBounds = mainWindow.getBounds();
   let settingsX = mainBounds.x - 268;
   let settingsY = mainBounds.y - 8;
 
@@ -156,7 +211,7 @@ function openSettings() {
 
   settingsWindow = new BrowserWindow({
     width: 260,
-    height: 210,
+    height: 250,
     x: settingsX,
     y: settingsY,
     frame: false,
@@ -204,6 +259,78 @@ function closeSettings() {
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('settings-closed');
+  }
+}
+
+// ============================================================
+// 关于窗口
+// ============================================================
+function openAbout() {
+  if (aboutWindow && !aboutWindow.isDestroyed()) {
+    closeAbout();
+    return;
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  closeSettings();
+
+  const mainBounds = mainWindow.getBounds();
+  let aboutX = mainBounds.x - 228;
+  let aboutY = mainBounds.y + mainBounds.height - 160;
+
+  if (aboutX < 0) {
+    aboutX = mainBounds.x + mainBounds.width + 12;
+  }
+  if (aboutY < 0) aboutY = 10;
+
+  aboutWindow = new BrowserWindow({
+    width: 220,
+    height: 160,
+    x: aboutX,
+    y: aboutY,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    focusable: true,
+    show: false,
+    icon: getIcon(),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  aboutWindow.loadFile('about.html');
+
+  aboutWindow.once('ready-to-show', () => {
+    if (aboutWindow && !aboutWindow.isDestroyed()) {
+      aboutWindow.show();
+      aboutWindow.focus();
+    }
+  });
+
+  aboutWindow.on('blur', () => {
+    setTimeout(() => {
+      if (aboutWindow && !aboutWindow.isDestroyed()) {
+        closeAbout();
+      }
+    }, 150);
+  });
+
+  aboutWindow.on('closed', () => {
+    aboutWindow = null;
+  });
+}
+
+function closeAbout() {
+  if (aboutWindow && !aboutWindow.isDestroyed()) {
+    aboutWindow.destroy();
+    aboutWindow = null;
   }
 }
 
@@ -257,7 +384,6 @@ function startApiServer() {
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('set-status', { color });
           }
-          // 同步托盘状态
           updateTrayMenu();
           const text = color === 'red' ? 'THINKING' : color === 'yellow' ? 'WAITING' : 'DONE';
           if (tray) tray.setToolTip('AI Traffic Light - ' + text);
@@ -299,7 +425,6 @@ ipcMain.on('update-state', (event, updates) => {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.webContents.send('state-update', updates);
   }
-  // 状态变更时更新托盘
   if ('color' in updates) updateTrayMenu();
 });
 
@@ -318,6 +443,9 @@ ipcMain.on('set-topmost', (event, topmost) => {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.setAlwaysOnTop(topmost);
   }
+  if (aboutWindow && !aboutWindow.isDestroyed()) {
+    aboutWindow.setAlwaysOnTop(topmost);
+  }
 });
 
 ipcMain.on('quit-app', () => {
@@ -332,6 +460,10 @@ ipcMain.on('toggle-settings', () => {
 
 ipcMain.on('close-settings', () => {
   closeSettings();
+});
+
+ipcMain.on('open-about', () => {
+  openAbout();
 });
 
 // ============================================================
