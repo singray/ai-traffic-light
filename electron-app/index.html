@@ -13,7 +13,6 @@
     --padding: calc(8px * var(--scale));
     --light-spacing: calc(6px * var(--scale));
     --light-size: calc(16px * var(--scale));
-    --single-light-size: calc(22px * var(--scale));
     --widget-radius: calc(20px * var(--scale));
     --glow-spread: calc(10px * var(--scale));
   }
@@ -106,13 +105,14 @@
   }
 
   .single-mode .tl-light {
-    width: var(--single-light-size); height: var(--single-light-size);
+    /* 单灯与三灯模式的灯大小一致 */
+    width: var(--light-size); height: var(--light-size);
   }
   .single-mode .tl-light::after {
-    top: calc(var(--single-light-size) * 0.136);
-    left: calc(var(--single-light-size) * 0.136);
-    width: calc(var(--single-light-size) * 0.36);
-    height: calc(var(--single-light-size) * 0.23);
+    top: calc(var(--light-size) * 0.125);
+    left: calc(var(--light-size) * 0.125);
+    width: calc(var(--light-size) * 0.375);
+    height: calc(var(--light-size) * 0.25);
   }
 
   /* Light state colors */
@@ -268,8 +268,10 @@
       lightYellow.style.display = '';
       lightGreen.style.display = '';
     }
-    // 模式切换后重新调整窗口大小
-    setTimeout(resizeWindow, 350);
+    // 等 DOM 重排完成后立即调整窗口（约 1 帧，避免可见卡顿）
+    requestAnimationFrame(() => {
+      requestAnimationFrame(resizeWindow);
+    });
   }
 
   // ============================================
@@ -307,6 +309,16 @@
     if (isSettingsOpen && e.button === 0) {
       window.trafficLightAPI.closeSettings();
       isSettingsOpen = false;
+    }
+  });
+
+  // Ctrl+S → 切换单灯/三灯模式
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 's') {
+      e.preventDefault();
+      isSingleMode = !isSingleMode;
+      applySingleMode();
+      window.trafficLightAPI.updateState({ singleLight: isSingleMode });
     }
   });
 

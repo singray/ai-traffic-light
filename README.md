@@ -28,21 +28,11 @@
 
 ## 截图
 
-### 三种状态
-
-| 🟢 绿灯 · 完成 | 🔴 红灯 · 思考中 | 🟡 黄灯 · 等待确认 |
+| 三灯模式 | 单灯模式 | 设置面板 |
 |:---:|:---:|:---:|
-| ![绿灯](screenshots/01-green.png) | ![红灯](screenshots/02-red.png) | ![黄灯](screenshots/03-yellow.png) |
+| ![三灯模式](screenshots/three-lamp.gif) | ![单灯模式](screenshots/single-lamp.gif) | ![设置面板](screenshots/setting.png) |
 
-### 设置面板 & 关于
-
-| 设置面板 | 关于窗口 |
-|:---:|:---:|
-| ![设置](screenshots/04-settings.png) | ![关于](screenshots/05-about.png) |
-
-### 动画演示
-
-![演示动画](screenshots/demo.gif)
+> 三灯/单灯模式均支持红黄绿灯色切换，红色呼吸动画、黄色闪烁动画、绿色常亮。右键或 `Ctrl+S` 切换模式。
 
 ---
 

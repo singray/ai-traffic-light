@@ -3,3 +3,11 @@ node_modules/
 *.msi
 .DS_Store
 debug.log
+screenshots/_capture*.py
+screenshots/_check_frame.py
+screenshots/_gif*.py
+screenshots/01-green.png
+screenshots/02-red.png
+screenshots/03-yellow.png
+screenshots/04-settings.png
+screenshots/05-about.png
