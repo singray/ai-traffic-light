@@ -4,11 +4,10 @@
 <meta charset="UTF-8">
 <style>
   /* ============================================
-     Design System: AI Traffic Light - Flat Style
-     100% 还原 HTML 原型，适配 Electron 桌面
+     AI Traffic Light - Flat Style
+     主窗口：只显示红绿灯，无设置面板
      ============================================ */
 
-  /* Scale-controlled sizes */
   :root {
     --scale: 2.5;
     --padding: calc(8px * var(--scale));
@@ -22,10 +21,7 @@
   /* Theme - Light */
   :root {
     --bg-widget: #FFFFFF;
-    --bg-surface: #F5F5F7;
     --border-default: #D2D2D7;
-    --text-primary: #1D1D1F;
-    --text-secondary: #6E6E73;
     --red-on: #FF3B30;
     --red-off: #FFE5E3;
     --red-glow: #FF6B64;
@@ -35,20 +31,14 @@
     --green-on: #34C759;
     --green-off: #E3F7E8;
     --green-glow: #5FD47A;
-    --switch-active: #34C759;
-    --switch-inactive: #E5E5EA;
     --shadow-widget: 0 2px 8px rgba(0,0,0,0.08);
-    --shadow-panel: 0 8px 24px rgba(0,0,0,0.12);
     --transition-theme: 250ms ease-out;
   }
 
   /* Theme - Dark */
   [data-theme="dark"] {
     --bg-widget: #1D1D1F;
-    --bg-surface: #2C2C2E;
     --border-default: #424245;
-    --text-primary: #F5F5F7;
-    --text-secondary: #86868B;
     --red-on: #FF453A;
     --red-off: #3A0F0C;
     --red-glow: #FF6B64;
@@ -58,10 +48,7 @@
     --green-on: #30D158;
     --green-off: #0A2E14;
     --green-glow: #5FD47A;
-    --switch-active: #30D158;
-    --switch-inactive: #3A3A3C;
     --shadow-widget: 0 2px 8px rgba(0,0,0,0.24);
-    --shadow-panel: 0 8px 24px rgba(0,0,0,0.36);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -73,10 +60,10 @@
     user-select: none;
   }
 
-  /* Widget container - draggable region */
+  /* Widget container - draggable */
   .tl-widget {
     position: absolute;
-    left: 12px; top: 12px;
+    left: 0; top: 0;
     background: var(--bg-widget);
     border: 1px solid var(--border-default);
     border-radius: var(--widget-radius);
@@ -148,93 +135,13 @@
   .tl-light.breathing { animation: breathing 2400ms ease-in-out infinite; }
   .tl-light.blinking { animation: blinking 800ms step-end infinite; }
 
-  /* Settings Panel */
-  .settings-panel {
-    -webkit-app-region: no-drag;
-    position: absolute;
-    width: 220px;
-    padding: 12px;
-    border-radius: 12px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-default);
-    box-shadow: var(--shadow-panel);
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(-4px);
-    transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
-                transform 200ms cubic-bezier(0.32, 0.72, 0, 1),
-                visibility 0s linear 200ms,
-                background var(--transition-theme), border-color var(--transition-theme);
-    left: 0; top: 0;
+  /* 切换主题时临时禁用 transition，避免与 animation 冲突 */
+  body.no-transition,
+  body.no-transition .tl-widget,
+  body.no-transition .tl-light,
+  body.no-transition * {
+    transition: none !important;
   }
-  .settings-panel.open {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
-    transition: opacity 200ms cubic-bezier(0.32, 0.72, 0, 1),
-                transform 200ms cubic-bezier(0.32, 0.72, 0, 1),
-                visibility 0s linear 0s,
-                background var(--transition-theme), border-color var(--transition-theme);
-  }
-
-  .settings-panel h3 {
-    font-size: 13px; font-weight: 600;
-    margin-bottom: 10px;
-    color: var(--text-primary);
-    letter-spacing: -0.01em;
-  }
-
-  .setting-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border-default);
-  }
-  .setting-row:last-of-type { border-bottom: none; }
-
-  .setting-label {
-    font-size: 13px;
-    color: var(--text-primary);
-  }
-
-  /* Switch component */
-  .switch {
-    width: 36px; height: 20px;
-    background: var(--switch-inactive);
-    border-radius: 10px;
-    position: relative;
-    cursor: pointer;
-    transition: background 200ms ease;
-    flex-shrink: 0;
-  }
-  .switch::after {
-    content: "";
-    position: absolute;
-    top: 2px; left: 2px;
-    width: 16px; height: 16px;
-    background: #fff;
-    border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .switch.active {
-    background: var(--switch-active);
-  }
-  .switch.active::after {
-    transform: translateX(16px);
-  }
-
-  .setting-action {
-    font-size: 13px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 6px 0;
-    transition: color 150ms;
-  }
-  .setting-action:hover { color: var(--text-primary); }
-  .setting-action.exit { color: #FF453A; }
-  .setting-action.exit:hover { color: #FF6B64; }
 </style>
 </head>
 <body data-theme="dark">
@@ -242,35 +149,17 @@
 <!-- Traffic Light Widget -->
 <div class="tl-widget" id="tlWidget">
   <div class="tl-lights" id="tlLights">
-    <div class="tl-light red on breathing" id="lightRed"></div>
+    <div class="tl-light red" id="lightRed"></div>
     <div class="tl-light yellow" id="lightYellow"></div>
-    <div class="tl-light green" id="lightGreen"></div>
+    <div class="tl-light green on" id="lightGreen"></div>
   </div>
-</div>
-
-<!-- Settings Panel -->
-<div class="settings-panel" id="settingsPanel">
-  <h3>设置</h3>
-  <div class="setting-row">
-    <span class="setting-label">单灯模式</span>
-    <div class="switch" id="switchSingle" onclick="toggleSingleMode()"></div>
-  </div>
-  <div class="setting-row">
-    <span class="setting-label">深色模式</span>
-    <div class="switch" id="switchDark" onclick="toggleTheme()"></div>
-  </div>
-  <div class="setting-row">
-    <span class="setting-label">窗口置顶</span>
-    <div class="switch" id="switchPin" onclick="togglePin()"></div>
-  </div>
-  <div class="setting-action exit" onclick="quitApp()">退出应用</div>
 </div>
 
 <script>
   // ============================================
-  // 初始化
+  // 状态
   // ============================================
-  let currentColor = 'red';
+  let currentColor = 'green';
   let isSingleMode = false;
   let isDark = true;
   let isPinned = true;
@@ -281,9 +170,10 @@
   const lightRed = document.getElementById('lightRed');
   const lightYellow = document.getElementById('lightYellow');
   const lightGreen = document.getElementById('lightGreen');
-  const settingsPanel = document.getElementById('settingsPanel');
 
-  // Load config from main process
+  // ============================================
+  // 初始化
+  // ============================================
   async function init() {
     try {
       const config = await window.trafficLightAPI.getConfig();
@@ -291,21 +181,18 @@
       setTheme(config.theme === 'dark' ? 'dark' : 'light');
     } catch(e) { console.error('Init error:', e); }
     updateLights();
-    scheduleResize();
-  }
-
-  function scheduleResize() {
+    // 延迟计算窗口大小（等CSS变量生效）
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        updateWindowSize();
+        resizeWindow();
       });
     });
   }
 
-  // Tell main process to resize window to fit widget + panel space
-  function updateWindowSize() {
-    const w = widget.offsetWidth + 12 + 220 + 24; // widget + gap + panel + padding
-    const h = Math.max(widget.offsetHeight, 220) + 24;
+  // 窗口大小只匹配红绿灯本体
+  function resizeWindow() {
+    const w = widget.offsetWidth + 4;
+    const h = widget.offsetHeight + 4;
     window.trafficLightAPI.adjustWindow(w, h);
   }
 
@@ -316,6 +203,25 @@
     if (data.color && ['red','yellow','green'].includes(data.color)) {
       setState(data.color);
     }
+  });
+
+  // 监听设置面板的变更
+  window.trafficLightAPI.onStateUpdate((data) => {
+    if ('singleLight' in data) {
+      isSingleMode = data.singleLight;
+      applySingleMode();
+    }
+    if ('theme' in data) {
+      setTheme(data.theme);
+    }
+    if ('alwaysOnTop' in data) {
+      isPinned = data.alwaysOnTop;
+    }
+  });
+
+  // 监听设置面板关闭
+  window.trafficLightAPI.onSettingsClosed(() => {
+    isSettingsOpen = false;
   });
 
   // ============================================
@@ -349,13 +255,10 @@
   }
 
   // ============================================
-  // 模式管理
+  // 单灯模式
   // ============================================
-  function toggleSingleMode() {
-    isSingleMode = !isSingleMode;
+  function applySingleMode() {
     lights.classList.toggle('single-mode', isSingleMode);
-    document.getElementById('switchSingle').classList.toggle('active', isSingleMode);
-
     if (isSingleMode) {
       lightRed.style.display = currentColor === 'red' ? '' : 'none';
       lightYellow.style.display = currentColor === 'yellow' ? '' : 'none';
@@ -365,84 +268,47 @@
       lightYellow.style.display = '';
       lightGreen.style.display = '';
     }
-
-    window.trafficLightAPI.updateState({ singleLight: isSingleMode });
-    setTimeout(updateWindowSize, 350);
+    // 模式切换后重新调整窗口大小
+    setTimeout(resizeWindow, 350);
   }
 
   // ============================================
-  // 主题管理
+  // 主题
   // ============================================
   function setTheme(theme) {
+    if (document.body.getAttribute('data-theme') === theme) return;
     isDark = theme === 'dark';
+
+    // 临时禁用 transition，避免与 animation 冲突导致闪烁
+    document.body.classList.add('no-transition');
+    document.body.offsetHeight; // 强制重绘
     document.body.setAttribute('data-theme', theme);
-    document.getElementById('switchDark').classList.toggle('active', isDark);
+    document.body.offsetHeight; // 强制重绘
+    requestAnimationFrame(() => {
+      document.body.classList.remove('no-transition');
+    });
+
     window.trafficLightAPI.updateState({ theme: theme });
-  }
-  function toggleTheme() {
-    setTheme(isDark ? 'light' : 'dark');
-  }
-
-  // ============================================
-  // 窗口置顶
-  // ============================================
-  function togglePin() {
-    isPinned = !isPinned;
-    document.getElementById('switchPin').classList.toggle('active', isPinned);
-    window.trafficLightAPI.setTopmost(isPinned);
-    window.trafficLightAPI.updateState({ alwaysOnTop: isPinned });
-  }
-
-  // 初始置顶状态
-  document.getElementById('switchPin').classList.add('active');
-
-  // ============================================
-  // 设置面板
-  // ============================================
-  function toggleSettings() {
-    isSettingsOpen = !isSettingsOpen;
-    if (isSettingsOpen) {
-      positionPanel();
-      settingsPanel.classList.add('open');
-    } else {
-      settingsPanel.classList.remove('open');
-    }
-  }
-
-  function closeSettings() {
-    isSettingsOpen = false;
-    settingsPanel.classList.remove('open');
-  }
-
-  function positionPanel() {
-    const widgetRect = widget.getBoundingClientRect();
-    settingsPanel.style.left = (widgetRect.right + 12) + 'px';
-    settingsPanel.style.top = widgetRect.top + 'px';
   }
 
   // ============================================
   // 事件监听
   // ============================================
 
-  // 右键打开/关闭设置面板
+  // 右键 → 打开设置面板
   widget.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    toggleSettings();
+    isSettingsOpen = true;
+    window.trafficLightAPI.toggleSettings();
   });
 
-  // 设置面板内的点击交给各自的 onclick 处理
-
-  // 按 Escape 关闭面板
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && isSettingsOpen) {
-      closeSettings();
+  // 左键点击 → 关闭设置面板
+  document.addEventListener('mousedown', (e) => {
+    if (isSettingsOpen && e.button === 0) {
+      window.trafficLightAPI.closeSettings();
+      isSettingsOpen = false;
     }
   });
-
-  // 退出应用
-  function quitApp() {
-    window.trafficLightAPI.quit();
-  }
 
   // ============================================
   // 启动

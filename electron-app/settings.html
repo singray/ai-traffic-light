@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  /* ============================================
+     设置面板 - 独立弹出窗口
+     ============================================ */
+
+  /* Theme - Light */
+  :root {
+    --bg-surface: #F5F5F7;
+    --border-default: #D2D2D7;
+    --text-primary: #1D1D1F;
+    --text-secondary: #6E6E73;
+    --switch-active: #34C759;
+    --switch-inactive: #E5E5EA;
+    --shadow-panel: 0 8px 24px rgba(0,0,0,0.12);
+    --transition-theme: 250ms ease-out;
+  }
+
+  /* Theme - Dark */
+  [data-theme="dark"] {
+    --bg-surface: #2C2C2E;
+    --border-default: #424245;
+    --text-primary: #F5F5F7;
+    --text-secondary: #86868B;
+    --switch-active: #30D158;
+    --switch-inactive: #3A3A3C;
+    --shadow-panel: 0 8px 24px rgba(0,0,0,0.36);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: transparent;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .panel {
+    margin: 8px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-panel);
+    transition: background var(--transition-theme), border-color var(--transition-theme);
+  }
+
+  .panel h3 {
+    font-size: 13px; font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .setting-row:last-of-type { border-bottom: none; }
+
+  .setting-label {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  /* Switch component */
+  .switch {
+    width: 36px; height: 20px;
+    background: var(--switch-inactive);
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background 200ms ease;
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .switch.active {
+    background: var(--switch-active);
+  }
+  .switch.active::after {
+    transform: translateX(16px);
+  }
+
+  .setting-action {
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 8px 0 2px 0;
+    transition: color 150ms;
+  }
+  .setting-action:hover { color: var(--text-primary); }
+  .setting-action.exit { color: #FF453A; }
+  .setting-action.exit:hover { color: #FF6B64; }
+
+  /* 切换主题时临时禁用 transition，避免闪烁 */
+  body.no-transition,
+  body.no-transition .panel,
+  body.no-transition .switch,
+  body.no-transition .setting-action,
+  body.no-transition * {
+    transition: none !important;
+  }
+</style>
+</head>
+<body data-theme="dark">
+
+<div class="panel">
+  <h3>设置</h3>
+  <div class="setting-row">
+    <span class="setting-label">单灯模式</span>
+    <div class="switch" id="switchSingle"></div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">深色模式</span>
+    <div class="switch" id="switchDark"></div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">窗口置顶</span>
+    <div class="switch" id="switchPin"></div>
+  </div>
+  <div class="setting-action exit" id="btnExit">退出应用</div>
+</div>
+
+<script>
+  let isSingleMode = false;
+  let isDark = true;
+  let isPinned = true;
+
+  const switchSingle = document.getElementById('switchSingle');
+  const switchDark = document.getElementById('switchDark');
+  const switchPin = document.getElementById('switchPin');
+  const btnExit = document.getElementById('btnExit');
+
+  // ============================================
+  // 初始化 - 从主进程获取当前状态
+  // ============================================
+  async function init() {
+    try {
+      const state = await window.trafficLightAPI.getState();
+      isSingleMode = state.singleLight || false;
+      isDark = state.theme === 'dark';
+      isPinned = state.alwaysOnTop !== false;
+
+      switchSingle.classList.toggle('active', isSingleMode);
+      switchDark.classList.toggle('active', isDark);
+      switchPin.classList.toggle('active', isPinned);
+
+      document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    } catch(e) { console.error('Settings init error:', e); }
+  }
+
+  // ============================================
+  // 开关事件
+  // ============================================
+  switchSingle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isSingleMode = !isSingleMode;
+    switchSingle.classList.toggle('active', isSingleMode);
+    window.trafficLightAPI.updateState({ singleLight: isSingleMode });
+  });
+
+  switchDark.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const newTheme = isDark ? 'light' : 'dark';
+    if (document.body.getAttribute('data-theme') === newTheme) return;
+    isDark = !isDark;
+    switchDark.classList.toggle('active', isDark);
+
+    // 临时禁用 transition，避免与主窗口 animation 冲突
+    document.body.classList.add('no-transition');
+    document.body.offsetHeight;
+    document.body.setAttribute('data-theme', newTheme);
+    document.body.offsetHeight;
+    requestAnimationFrame(() => {
+      document.body.classList.remove('no-transition');
+    });
+
+    window.trafficLightAPI.updateState({ theme: newTheme });
+  });
+
+  switchPin.addEventListener('click', (e) => {
+    e.stopPropagation();
+    isPinned = !isPinned;
+    switchPin.classList.toggle('active', isPinned);
+    window.trafficLightAPI.setTopmost(isPinned);
+    window.trafficLightAPI.updateState({ alwaysOnTop: isPinned });
+  });
+
+  btnExit.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.trafficLightAPI.quit();
+  });
+
+  // ============================================
+  // 监听主窗口发来的状态变更
+  // ============================================
+  window.trafficLightAPI.onStateUpdate((data) => {
+    if ('singleLight' in data) {
+      isSingleMode = data.singleLight;
+      switchSingle.classList.toggle('active', isSingleMode);
+    }
+    if ('theme' in data) {
+      const newTheme = data.theme;
+      if (document.body.getAttribute('data-theme') === newTheme) return;
+      isDark = newTheme === 'dark';
+      switchDark.classList.toggle('active', isDark);
+
+      // 临时禁用 transition，避免闪烁
+      document.body.classList.add('no-transition');
+      document.body.offsetHeight;
+      document.body.setAttribute('data-theme', newTheme);
+      document.body.offsetHeight;
+      requestAnimationFrame(() => {
+        document.body.classList.remove('no-transition');
+      });
+    }
+    if ('alwaysOnTop' in data) {
+      isPinned = data.alwaysOnTop;
+      switchPin.classList.toggle('active', isPinned);
+    }
+  });
+
+  // 启动
+  init();
+</script>
+
+</body>
+</html>
