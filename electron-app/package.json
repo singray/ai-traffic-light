@@ -1,0 +1,14 @@
+{
+  "name": "ai-traffic-light",
+  "version": "2.0.0",
+  "description": "AI Traffic Light - Desktop Floating Widget (Electron)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
