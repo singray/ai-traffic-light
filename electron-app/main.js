@@ -17,6 +17,8 @@ let settingsWindow = null;
 let aboutWindow = null;
 let tray = null;
 let apiServer = null;
+// 防抖：程序打开子窗口时，主窗口会获得焦点，需要忽略短时间内的 focus 事件
+let ignoreFocusUntil = 0;
 
 // 命令行参数
 const args = process.argv.slice(2);
@@ -175,6 +177,8 @@ function createWindow() {
   });
 
   mainWindow.on('focus', () => {
+    // 程序打开子窗口时忽略 focus 事件（防抖 500ms）
+    if (Date.now() < ignoreFocusUntil) return;
     closeSettings();
     closeAbout();
   });
@@ -194,6 +198,9 @@ function openSettings() {
   }
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  // 防抖：阻止主窗口 focus 事件误杀即将打开的子窗口
+  ignoreFocusUntil = Date.now() + 500;
 
   if (!mainWindow.isVisible()) {
     mainWindow.show();
@@ -241,10 +248,11 @@ function openSettings() {
 
   settingsWindow.on('blur', () => {
     setTimeout(() => {
+      if (Date.now() < ignoreFocusUntil) return;
       if (settingsWindow && !settingsWindow.isDestroyed()) {
         closeSettings();
       }
-    }, 150);
+    }, 200);
   });
 
   settingsWindow.on('closed', () => {
@@ -272,6 +280,9 @@ function openAbout() {
   }
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  // 防抖：关闭设置时主窗口会获得焦点，阻止 focus 事件误杀 about 窗口
+  ignoreFocusUntil = Date.now() + 500;
 
   closeSettings();
 
@@ -316,10 +327,11 @@ function openAbout() {
 
   aboutWindow.on('blur', () => {
     setTimeout(() => {
+      if (Date.now() < ignoreFocusUntil) return;
       if (aboutWindow && !aboutWindow.isDestroyed()) {
         closeAbout();
       }
-    }, 150);
+    }, 200);
   });
 
   aboutWindow.on('closed', () => {
