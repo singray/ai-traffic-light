@@ -26,6 +26,24 @@
 - **右键设置面板** — 单灯模式、深色/浅色模式、窗口置顶
 - **单灯/三灯模式** — 切换只显示当前状态灯或三灯竖排
 
+## 截图
+
+### 三种状态
+
+| 🟢 绿灯 · 完成 | 🔴 红灯 · 思考中 | 🟡 黄灯 · 等待确认 |
+|:---:|:---:|:---:|
+| ![绿灯](screenshots/01-green.png) | ![红灯](screenshots/02-red.png) | ![黄灯](screenshots/03-yellow.png) |
+
+### 设置面板 & 关于
+
+| 设置面板 | 关于窗口 |
+|:---:|:---:|
+| ![设置](screenshots/04-settings.png) | ![关于](screenshots/05-about.png) |
+
+### 动画演示
+
+![演示动画](screenshots/demo.gif)
+
 ---
 
 ## 快速开始
@@ -343,9 +361,9 @@ ai-traffic-light/
 │   ├── preload.js       # IPC 桥接
 │   ├── index.html       # 红绿灯 UI
 │   ├── settings.html    # 设置面板 UI
-│   ├── assets/
-│   │   └── icon.ico     # 托盘图标
+│   ├── about.html       # 关于窗口
 │   └── package.json
+├── screenshots/         # 截图和演示 GIF
 ├── README.md
 └── LICENSE
 ```
