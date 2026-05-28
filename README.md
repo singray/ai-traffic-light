@@ -90,12 +90,13 @@ curl -X POST http://localhost:9527/api/status \
 | `PreToolUse` | 🔴 红 | 进行中（调用工具） |
 | `PermissionRequest` | 🟡 黄闪 | 需要你做选择 |
 | `Stop` | 🟢 绿 | 一轮回答完毕 |
+| `StopFailure` | 🟢 绿 | 你按 ESC 中断 / 模型出错 |
 
 **为什么要用助手脚本而不是直接在 hook 里写 curl？**
 
 - Windows 下 inline 命令的引号转义极其痛苦
 - 想做到 "启动时若服务未运行则自动拉起 / 已运行则跳过 / 失败不报错"，单条命令写不开
-- 抽成 `tl.ps1` 后，5 个 hook 都只是一行调用，干净易维护
+- 抽成 `tl.ps1` 后，6 个 hook 都只是一行调用，干净易维护
 
 ---
 
@@ -227,10 +228,22 @@ try {
           "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" green"
         }]
       }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [{
+          "async": true,
+          "shell": "powershell",
+          "type": "command",
+          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" green"
+        }]
+      }
     ]
   }
 }
 ```
+
+> **`StopFailure` 是必要的** —— 当你按 ESC 手动中断、或模型 / 钩子返回错误时，Claude Code 走的是 `StopFailure` 而不是 `Stop`。少了这一条，中断后红绿灯会卡在红色不变。
 
 **关键点：**
 
@@ -240,7 +253,7 @@ try {
 
 ### 第 3 步：替换路径里的 `<你>`
 
-把 5 处 `C:\\Users\\<你>\\.claude\\tl.ps1` 替换为你的真实用户名。注意 JSON 里反斜杠要写成 `\\`。
+把 6 处 `C:\\Users\\<你>\\.claude\\tl.ps1` 替换为你的真实用户名。注意 JSON 里反斜杠要写成 `\\`。
 
 ### 第 4 步：重启 Claude Code
 
@@ -257,7 +270,7 @@ try {
 - [ ] `~/.claude/tl.ps1` 里的 `$TL_APP_DIR` 路径正确？
 - [ ] 单独跑 `powershell -File ~/.claude/tl.ps1 ensure` 能拉起红绿灯吗？
 - [ ] `curl http://127.0.0.1:9527/api/health` 是否返回 `{"status":"running"}`？
-- [ ] settings.json 里的 5 处 `<你>` 都替换了？
+- [ ] settings.json 里的 6 处 `<你>` 都替换了？
 - [ ] settings.json 是合法 JSON？运行 `powershell -Command "Get-Content ~/.claude/settings.json -Raw | ConvertFrom-Json"` 不报错？
 
 ---

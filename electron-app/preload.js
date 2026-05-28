@@ -10,6 +10,14 @@ contextBridge.exposeInMainWorld('trafficLightAPI', {
   // 调整主窗口尺寸
   adjustWindow: (width, height) => ipcRenderer.send('adjust-window', { width, height }),
 
+  // 移动主窗口（主进程驱动拖拽，renderer 只发信号）
+  // dragStart 必须把 mousedown 时鼠标在窗口内的偏移传过去，
+  // 主进程才能用绝对定位算法（cursor - offset = 窗口左上角），
+  // 否则因 IPC 异步时差，鼠标与窗口的相对位置会漂移。
+  dragStart: (offset) => ipcRenderer.send('drag-start', offset),
+  dragMove: () => ipcRenderer.send('drag-move'),
+  dragEnd: () => ipcRenderer.send('drag-end'),
+
   // 切换窗口置顶
   setTopmost: (topmost) => ipcRenderer.send('set-topmost', topmost),
 

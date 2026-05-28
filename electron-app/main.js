@@ -122,6 +122,8 @@ function updateTrayMenu() {
     { label: '🟡 黄灯 - 等待确认', type: 'radio', checked: state.color === 'yellow', click: () => setState('yellow') },
     { label: '🟢 绿灯 - 已完成', type: 'radio', checked: state.color === 'green', click: () => setState('green') },
     { type: 'separator' },
+    { label: '复位位置', click: () => resetWindowPosition() },
+    { type: 'separator' },
     { label: '设置...', click: () => openSettings() },
     { type: 'separator' },
     { label: '退出', click: () => { if (apiServer) apiServer.close(); app.quit(); } },
@@ -139,6 +141,16 @@ function setState(color) {
   updateTrayMenu();
   const text = color === 'red' ? '正在思考' : color === 'yellow' ? '等待确认' : '已完成';
   if (tray) tray.setToolTip('AI Traffic Light - ' + text);
+}
+
+function resetWindowPosition() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
+  mainWindow.setPosition(screenW - 150, 80);
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 }
 
 // ============================================================
@@ -444,6 +456,35 @@ ipcMain.on('adjust-window', (event, { width, height }) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     const [x, y] = mainWindow.getPosition();
     mainWindow.setBounds({ x, y, width, height });
+  }
+});
+
+// ============================================================
+// 拖拽：绝对定位算法
+//   renderer 在 mousedown 时把"鼠标相对窗口左上角的偏移"传过来
+//   主进程每次 move 直接 cursor - offset = 窗口左上角
+//   避免 IPC 异步时差导致的"起点快照"漂移
+// ============================================================
+ipcMain.on('drag-start', (event, offset) => {
+  if (mainWindow && !mainWindow.isDestroyed() && offset) {
+    // offset 是 CSS 像素，setPosition 用 DIP，对 Electron 来说一致
+    mainWindow._dragOffset = { x: offset.x | 0, y: offset.y | 0 };
+  }
+});
+
+ipcMain.on('drag-move', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow._dragOffset) return;
+  const { x: mouseX, y: mouseY } = screen.getCursorScreenPoint();
+  mainWindow.setPosition(
+    Math.round(mouseX - mainWindow._dragOffset.x),
+    Math.round(mouseY - mainWindow._dragOffset.y),
+  );
+});
+
+ipcMain.on('drag-end', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow._dragOffset = null;
   }
 });
 

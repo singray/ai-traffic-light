@@ -70,7 +70,6 @@
     box-shadow: var(--shadow-widget);
     cursor: default;
     transition: background var(--transition-theme), border-color var(--transition-theme), box-shadow var(--transition-theme);
-    -webkit-app-region: drag;
   }
 
   .tl-lights {
@@ -88,7 +87,6 @@
     position: relative;
     transition: background 300ms cubic-bezier(0.4, 0, 0.2, 1),
                 box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
-    -webkit-app-region: no-drag;
   }
 
   /* Specular highlight */
@@ -321,6 +319,44 @@
       window.trafficLightAPI.updateState({ singleLight: isSingleMode });
     }
   });
+
+  // ============================================
+  // 手动拖拽：绝对定位（消除 IPC 时差导致的漂移）
+  //   按下时把鼠标在窗口内的偏移交给主进程，
+  //   后续每次 move，主进程直接定位，不做增量。
+  // ============================================
+  let isDragging = false;
+
+  widget.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('.tl-light')) return;
+
+    isDragging = true;
+    widget.style.cursor = 'grabbing';
+    // screenX/Y - clientX/Y = 窗口左上角的屏幕坐标，
+    // 但更稳的写法是用 clientX/Y 自身（窗口内偏移），
+    // 主进程用 cursor - offset 反推窗口位置。
+    window.trafficLightAPI.dragStart({ x: e.clientX, y: e.clientY });
+  });
+
+  document.addEventListener('mousemove', () => {
+    if (!isDragging) return;
+    window.trafficLightAPI.dragMove();
+  });
+
+  function endDrag() {
+    if (isDragging) {
+      isDragging = false;
+      widget.style.cursor = 'default';
+      window.trafficLightAPI.dragEnd();
+    }
+  }
+
+  document.addEventListener('mouseup', endDrag);
+  // 鼠标离开窗口也停止拖拽，防止卡死
+  document.addEventListener('mouseleave', endDrag);
+  // 失焦也停止，防止 alt-tab 后状态错乱
+  window.addEventListener('blur', endDrag);
 
   // ============================================
   // 启动
