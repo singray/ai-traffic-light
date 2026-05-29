@@ -195,6 +195,42 @@
   }
 
   // ============================================
+  // 鼠标穿透：让透明区域不挡后面的应用
+  //   主进程默认 setIgnoreMouseEvents(true, {forward:true})
+  //   该模式下 mousemove 仍然转发到 renderer，其余事件穿透
+  //   renderer 用 elementFromPoint 命中实体（widget/灯）时
+  //   立即关掉 ignore，让本窗口能接收点击/右键/拖拽
+  //   离开实体时再开 ignore 恢复穿透
+  // ============================================
+  let isIgnoring = true;       // 与 main.js 默认值保持一致
+  let isDragging = false;      // 提前声明，命中检测要用
+
+  function isHitWidget(x, y) {
+    // 用 elementFromPoint 检测鼠标位置下是不是 widget 或灯泡
+    // 命中 body/html 说明在 box-shadow 的虚边或窗口边缘 —— 应该穿透
+    const el = document.elementFromPoint(x, y);
+    if (!el) return false;
+    if (el === document.body || el === document.documentElement) return false;
+    // widget 容器或它的任何子节点都算实体
+    return widget.contains(el) || el === widget;
+  }
+
+  function setIgnore(ignore) {
+    if (ignore === isIgnoring) return;   // 防重复 IPC
+    isIgnoring = ignore;
+    window.trafficLightAPI.setIgnore(ignore);
+  }
+
+  document.addEventListener('mousemove', (e) => {
+    // 拖拽中绝不让窗口变穿透，否则瞬间丢焦点导致拖拽中断
+    if (isDragging) {
+      if (isIgnoring) setIgnore(false);
+      return;
+    }
+    setIgnore(!isHitWidget(e.clientX, e.clientY));
+  });
+
+  // ============================================
   // 监听外部 API 状态变化
   // ============================================
   window.trafficLightAPI.onStatusChange((data) => {
@@ -324,8 +360,8 @@
   // 手动拖拽：绝对定位（消除 IPC 时差导致的漂移）
   //   按下时把鼠标在窗口内的偏移交给主进程，
   //   后续每次 move，主进程直接定位，不做增量。
+  //   isDragging 在前面"鼠标穿透"代码块已声明
   // ============================================
-  let isDragging = false;
 
   widget.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;

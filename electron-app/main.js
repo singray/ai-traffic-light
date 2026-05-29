@@ -122,7 +122,8 @@ function updateTrayMenu() {
     { label: '🟡 黄灯 - 等待确认', type: 'radio', checked: state.color === 'yellow', click: () => setState('yellow') },
     { label: '🟢 绿灯 - 已完成', type: 'radio', checked: state.color === 'green', click: () => setState('green') },
     { type: 'separator' },
-    { label: '复位位置', click: () => resetWindowPosition() },
+    { label: '复位', click: () => resetWindowPosition() },
+    { label: '重启', click: () => { app.relaunch(); app.quit(); } },
     { type: 'separator' },
     { label: '设置...', click: () => openSettings() },
     { type: 'separator' },
@@ -180,6 +181,11 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
   mainWindow.setVisibleOnAllWorkspaces(true);
+
+  // 默认让窗口对鼠标透明，{ forward: true } 仍然把 mousemove 转发给 renderer，
+  // renderer 用 elementFromPoint 命中检测后再决定是否临时关掉 ignore。
+  // 这样 widget 圆角矩形之外（透明区域）的点击会真正穿透到下层应用。
+  mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
   mainWindow.on('close', (e) => {
     if (!app.isQuitting) {
@@ -456,6 +462,16 @@ ipcMain.on('adjust-window', (event, { width, height }) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     const [x, y] = mainWindow.getPosition();
     mainWindow.setBounds({ x, y, width, height });
+  }
+});
+
+// renderer 命中检测后告诉主进程切换 ignore 状态：
+//   ignore=true  → 鼠标在透明区，事件穿透到下层应用
+//   ignore=false → 鼠标在 widget 实体上，本窗口正常接收点击/右键/拖拽
+// forward 始终保持 true，否则 ignore 后 renderer 收不到 mousemove 也就无法切回。
+ipcMain.on('set-ignore', (event, ignore) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setIgnoreMouseEvents(!!ignore, { forward: true });
   }
 });
 

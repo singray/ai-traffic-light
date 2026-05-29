@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('trafficLightAPI', {
   dragMove: () => ipcRenderer.send('drag-move'),
   dragEnd: () => ipcRenderer.send('drag-end'),
 
+  // 鼠标穿透切换：true = 透明区域穿透到下层应用，false = 当前窗口接收事件
+  setIgnore: (ignore) => ipcRenderer.send('set-ignore', ignore),
+
   // 切换窗口置顶
   setTopmost: (topmost) => ipcRenderer.send('set-topmost', topmost),
 
