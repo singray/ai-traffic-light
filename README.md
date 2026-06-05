@@ -16,7 +16,33 @@
 | 🟡 **黄灯** | WAITING — 等待确认 | 闪烁提醒 | 需要用户做选择/确认 |
 | 🟢 **绿灯** | DONE — 完成 | 常亮 | 一轮任务执行完毕 |
 
-## 核心特性
+## 如何安装？
+
+最简单的方式：**把它丢给你的 AI 工具。**
+
+给出下面一句话即可：
+
+> **参考 https://github.com/singray/ai-traffic-light/，安装并配置 hooks。**
+
+Claude Code、Cursor 或其他 AI 助手会自动帮你完成克隆、安装、配置等全部步骤。
+
+当然，你也可以手动操作：
+
+```bash
+# 克隆仓库
+git clone https://github.com/singray/ai-traffic-light.git
+cd ai-traffic-light
+
+# 安装依赖
+npm install
+
+# 启动开发模式
+npm run dev
+```
+
+启动后，服务默认运行在 `localhost:9527`，桌面会出现红绿灯悬浮窗。
+
+---
 
 - **Electron 桌面应用** — 完美 CSS 发光/动画效果，100% 还原原型设计
 - **系统托盘图标** — 任务栏右下角显示红绿灯图标，方便判断是否运行
@@ -89,14 +115,15 @@ curl -X POST http://localhost:9527/api/status \
 | `UserPromptSubmit` | 🔴 红 | 开始处理你提的问题 |
 | `PreToolUse` | 🔴 红 | 进行中（调用工具） |
 | `PermissionRequest` | 🟡 黄闪 | 需要你做选择 |
-| `Stop` | 🟢 绿 | 一轮回答完毕 |
-| `StopFailure` | 🟢 绿 | 你按 ESC 中断 / 模型出错 |
+| `Stop` | 🟢 绿 | 一轮回答完毕 / 你按 ESC 中断 |
+
+> 实测：ESC 中断也走 `Stop` 事件（不是 `StopFailure`），一条 `Stop` 钩子就能覆盖正常结束和中断两种情况。
 
 **为什么要用助手脚本而不是直接在 hook 里写 curl？**
 
 - Windows 下 inline 命令的引号转义极其痛苦
 - 想做到 "启动时若服务未运行则自动拉起 / 已运行则跳过 / 失败不报错"，单条命令写不开
-- 抽成 `tl.ps1` 后，6 个 hook 都只是一行调用，干净易维护
+- 抽成 `tl.ps1` 后，5 个 hook 都只是一行调用，干净易维护
 
 ---
 
@@ -228,22 +255,12 @@ try {
           "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" green"
         }]
       }
-    ],
-    "StopFailure": [
-      {
-        "hooks": [{
-          "async": true,
-          "shell": "powershell",
-          "type": "command",
-          "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" green"
-        }]
-      }
     ]
   }
 }
 ```
 
-> **`StopFailure` 是必要的** —— 当你按 ESC 手动中断、或模型 / 钩子返回错误时，Claude Code 走的是 `StopFailure` 而不是 `Stop`。少了这一条，中断后红绿灯会卡在红色不变。
+> ESC 中断也走 `Stop`（实测验证过），不需要单独配 `StopFailure`。
 
 **关键点：**
 
@@ -253,7 +270,7 @@ try {
 
 ### 第 3 步：替换路径里的 `<你>`
 
-把 6 处 `C:\\Users\\<你>\\.claude\\tl.ps1` 替换为你的真实用户名。注意 JSON 里反斜杠要写成 `\\`。
+把 5 处 `C:\\Users\\<你>\\.claude\\tl.ps1` 替换为你的真实用户名。注意 JSON 里反斜杠要写成 `\\`。
 
 ### 第 4 步：重启 Claude Code
 
@@ -270,7 +287,7 @@ try {
 - [ ] `~/.claude/tl.ps1` 里的 `$TL_APP_DIR` 路径正确？
 - [ ] 单独跑 `powershell -File ~/.claude/tl.ps1 ensure` 能拉起红绿灯吗？
 - [ ] `curl http://127.0.0.1:9527/api/health` 是否返回 `{"status":"running"}`？
-- [ ] settings.json 里的 6 处 `<你>` 都替换了？
+- [ ] settings.json 里的 5 处 `<你>` 都替换了？
 - [ ] settings.json 是合法 JSON？运行 `powershell -Command "Get-Content ~/.claude/settings.json -Raw | ConvertFrom-Json"` 不报错？
 
 ---
