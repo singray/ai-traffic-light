@@ -129,18 +129,27 @@ curl -X POST http://localhost:9527/api/status \
 
 ### 第 1 步：放置助手脚本
 
-新建 `~/.claude/tl.ps1`（即 `C:\Users\<你>\.claude\tl.ps1`），内容如下：
+把仓库里的 [`electron-app/tl.ps1`](electron-app/tl.ps1) 复制到 `~/.claude/tl.ps1`（即 `C:\Users\<你>\.claude\tl.ps1`），**只需要改一行**：把 `$TL_APP_DIR` 换成你本地 `electron-app` 的绝对路径。
+
+这个脚本同时支持：
+- 直接颜色：`red`、`yellow`、`green`
+- 黄灯闪烁：`yellow blink`
+- Clawd-on-Desk / Claude Code 状态名：`thinking`、`working`、`notification`、`attention`、`error` 等（见下表）
+
+> 你也可以直接复制下面代码：
 
 ```powershell
 # Traffic Light helper for Claude Code hooks
 # Usage:
 #   tl.ps1 ensure                # 启动 electron 红绿灯（已存在则跳过），切绿灯
-#   tl.ps1 red | yellow | green  # 切灯
+#   tl.ps1 red | yellow | green  # 直接切灯
 #   tl.ps1 yellow blink          # 黄灯闪烁
+#   tl.ps1 <clawd-state>         # 接受 Clawd-on-Desk 状态名自动映射
+#                                  如 thinking / working / notification / attention 等
 # All errors are swallowed silently.
 
 param(
-    [string]$Color = "",
+    [string]$ColorOrState = "",
     [string]$Mode  = ""
 )
 
@@ -149,6 +158,41 @@ $ErrorActionPreference = "SilentlyContinue"
 # ⚠️ 改成你本地 traffic-light/electron-app 的绝对路径
 $TL_APP_DIR = "C:\path\to\traffic-light\electron-app"
 $TL_EXE     = Join-Path $TL_APP_DIR "node_modules\electron\dist\electron.exe"
+
+# Clawd-on-Desk 状态 -> 红绿灯颜色映射
+$CLAWD_STATE_MAP = @{
+    'idle'         = @{ color = 'green';  blink = $false }
+    'thinking'     = @{ color = 'red';    blink = $false }
+    'working'      = @{ color = 'red';    blink = $false }
+    'typing'       = @{ color = 'red';    blink = $false }
+    'juggling'     = @{ color = 'red';    blink = $false }
+    'building'     = @{ color = 'red';    blink = $false }
+    'headphones'   = @{ color = 'red';    blink = $false }
+    'notification' = @{ color = 'yellow'; blink = $true  }
+    'permission'   = @{ color = 'yellow'; blink = $true  }
+    'attention'    = @{ color = 'green';  blink = $false }
+    'happy'        = @{ color = 'green';  blink = $false }
+    'error'        = @{ color = 'yellow'; blink = $true  }
+    'sweeping'     = @{ color = 'red';    blink = $false }
+    'carrying'     = @{ color = 'red';    blink = $false }
+    'sleeping'     = @{ color = 'green';  blink = $false }
+
+    # Claude Code 原始事件名也支持直接传入
+    'SessionStart'   = @{ color = 'green';  blink = $false }
+    'SessionEnd'     = @{ color = 'green';  blink = $false }
+    'UserPromptSubmit'= @{ color = 'red';   blink = $false }
+    'PreToolUse'     = @{ color = 'red';    blink = $false }
+    'PostToolUse'    = @{ color = 'red';    blink = $false }
+    'PostToolUseFailure' = @{ color = 'yellow'; blink = $true }
+    'PermissionRequest'  = @{ color = 'yellow'; blink = $true }
+    'Stop'           = @{ color = 'green';  blink = $false }
+    'StopFailure'    = @{ color = 'yellow'; blink = $true }
+    'SubagentStart'  = @{ color = 'red';    blink = $false }
+    'SubagentStop'   = @{ color = 'red';    blink = $false }
+    'PreCompact'     = @{ color = 'red';    blink = $false }
+    'PostCompact'    = @{ color = 'green';  blink = $false }
+    'WorktreeCreate' = @{ color = 'red';    blink = $false }
+}
 
 function Test-TLPort {
     try {
@@ -172,8 +216,24 @@ function Set-TLColor([string]$col, [bool]$blink) {
     } catch {}
 }
 
+function Resolve-TLState([string]$inputState) {
+    $key = $inputState.Trim().ToLower()
+    if ($CLAWD_STATE_MAP.ContainsKey($key)) {
+        return $CLAWD_STATE_MAP[$key]
+    }
+    # 兼容原始大小写的 Claude Code 事件名
+    if ($CLAWD_STATE_MAP.ContainsKey($inputState)) {
+        return $CLAWD_STATE_MAP[$inputState]
+    }
+    # 兜底：按原始颜色处理
+    if (@('red','yellow','green') -contains $key) {
+        return @{ color = $key; blink = ($Mode -eq 'blink') }
+    }
+    return $null
+}
+
 try {
-    if ($Color -eq "ensure") {
+    if ($ColorOrState -eq "ensure") {
         if (-not (Test-TLPort)) {
             try {
                 Start-Process `
@@ -191,8 +251,10 @@ try {
         return
     }
 
-    $blink = ($Mode -eq "blink")
-    Set-TLColor $Color $blink
+    $resolved = Resolve-TLState $ColorOrState
+    if ($resolved -eq $null) { return }
+
+    Set-TLColor $resolved.color $resolved.blink
 } catch {}
 ```
 
@@ -324,6 +386,93 @@ tl '{"color":"green"}'    # 完成
     }]
   }
 }
+```
+
+---
+
+## 🦀 与 Clawd-on-Desk 联动
+
+[Clawd-on-Desk](https://github.com/rullerzhou-afk/clawd-on-desk) 是一个桌面宠物/状态可视化工具，也监听 Claude Code / Kimi / Pi 等 Agent 的生命周期事件。红绿灯可以和它并排运行，用同一套事件驱动两种形态的状态展示。
+
+### Clawd 状态 → 红绿灯映射
+
+参考 [Clawd 状态映射文档](https://github.com/rullerzhou-afk/clawd-on-desk/blob/main/docs/guides/state-mapping.zh-CN.md)，对应关系如下：
+
+| Clawd 状态 | 红绿灯 | 动画 | 触发场景 |
+|---|:---:|---|---|
+| `idle` / `attention` / `happy` | 🟢 绿灯 | 常亮 | 待命 / 完成 / 开心 |
+| `thinking` / `working` / `typing` / `juggling` / `building` / `headphones` | 🔴 红灯 | 呼吸 | 思考中 / 调用工具 / 子代理工作 |
+| `notification` / `permission` / `error` | 🟡 黄灯 | 闪烁 | 权限请求 / 报错 / 需要确认 |
+| `sweeping` / `carrying` | 🔴 红灯 | 呼吸 | 压缩上下文 / 创建工作区 |
+| `sleeping` | 🟢 绿灯 | 常亮 | 长时间无活动 |
+
+### 配置方式
+
+因为 Clawd 和红绿灯都通过 **Claude Code hooks** 接收事件，最简单的方式是：在已有 Clawd hooks 旁边，再挂一组红绿灯 hooks。
+
+`tl.ps1` 已经内置了 Clawd 状态名和 Claude Code 事件名的自动映射，所以 hooks 里可以直接传事件名：
+
+```jsonc
+{
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "async": true,
+        "shell": "powershell",
+        "type": "command",
+        "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" SessionStart"
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "async": true,
+        "shell": "powershell",
+        "type": "command",
+        "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" UserPromptSubmit"
+      }]
+    }],
+    "PreToolUse": [{
+      "matcher": "Bash|Write|Edit|Read|Glob|Grep|WebFetch|WebSearch|Task|Agent",
+      "hooks": [{
+        "async": true,
+        "shell": "powershell",
+        "type": "command",
+        "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" PreToolUse"
+      }]
+    }],
+    "PermissionRequest": [{
+      "hooks": [{
+        "async": true,
+        "shell": "powershell",
+        "type": "command",
+        "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" PermissionRequest"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "async": true,
+        "shell": "powershell",
+        "type": "command",
+        "command": "& \"C:\\Users\\<你>\\.claude\\tl.ps1\" Stop"
+      }]
+    }]
+  }
+}
+```
+
+> 如果你是 Kimi-CLI 或 Pi 用户，也可以把对应事件名传给 `tl.ps1`，脚本同样支持 `thinking`、`working`、`notification`、`attention`、`error` 等 Clawd 状态名。
+
+### 手动测试映射
+
+```powershell
+# 模拟 Clawd 的 working 状态 → 红灯
+& ~/.claude/tl.ps1 working
+
+# 模拟权限请求 → 黄灯闪烁
+& ~/.claude/tl.ps1 permission
+
+# 模拟完成 → 绿灯
+& ~/.claude/tl.ps1 attention
 ```
 
 ---
