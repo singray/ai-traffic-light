@@ -3,6 +3,15 @@ const http = require('http');
 const path = require('path');
 
 // ============================================================
+// 性能优化：红绿灯只有 3 个圆圈，不需要 GPU / 网络服务独立进程
+// 禁用硬件加速 → 省掉 GPU 进程（~90MB）
+// 限制 V8 堆 → 控制主进程内存
+// ============================================================
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=64');
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess');
+
+// ============================================================
 // 状态管理
 // ============================================================
 let state = {
@@ -176,6 +185,10 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // 红绿灯不需要这些功能，禁用省内存
+      spellcheck: false,
+      enableRemoteModule: false,
+      backgroundThrottling: true,
     },
   });
 
