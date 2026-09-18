@@ -11,3 +11,4 @@ screenshots/02-red.png
 screenshots/03-yellow.png
 screenshots/04-settings.png
 screenshots/05-about.png
+*.bak-*

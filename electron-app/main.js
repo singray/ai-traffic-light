@@ -551,11 +551,28 @@ ipcMain.on('open-about', () => {
 // ============================================================
 // 应用生命周期
 // ============================================================
-app.whenReady().then(() => {
-  startApiServer();
-  createWindow();
-  createTray();
-});
+
+// 单实例锁：防止 hooks 并发调用导致进程风暴
+// 如果已有实例在运行，新进程立即退出
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  // 第二个实例，立即退出，不创建任何窗口
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // 有人试图启动第二个实例，把已有窗口显示出来
+    if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    startApiServer();
+    createWindow();
+    createTray();
+  });
+}
 
 app.on('window-all-closed', () => {
   // 托盘模式下不退出，用户通过托盘退出
